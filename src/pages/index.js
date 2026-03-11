@@ -1,0 +1,11 @@
+export {default as MoviesDetailPage} from './MoviesDetailPage';
+export {default as MoviesListPage} from './MoviesListPage';
+export {default as PageNotFound} from './PageNotFound';
+export {default as SearchPage} from './SearchPage';
+export {default as HomePage} from './HomePage';
+export {default as PopularPage} from './PopularPage';
+export {default as TopRatedPage} from './TopRatedPage';
+export {default as RecommendationQuizPage} from './RecommendationQuizPage';
+export {default as RecommendationPage} from './RecommendationPage';
+export {default as ProfilePage} from './ProfilePage';
+export {default as PersonDetailPage} from './PersonDetailPage';
