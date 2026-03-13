@@ -1,0 +1,28 @@
+%% Mermaid class diagram (server models - mongoose)
+classDiagram
+  class User {
+    +ObjectId _id
+    +String username
+    +String email
+    +String passwordHash
+    +Date createdAt
+  }
+
+  class Comment {
+    +ObjectId _id
+    +ObjectId user
+    +String movieId
+    +String text
+    +Date createdAt
+  }
+
+  class Rating {
+    +ObjectId _id
+    +ObjectId user
+    +String movieId
+    +Number rating
+    +Date createdAt
+  }
+
+  Comment --> User : user (ref)
+  Rating --> User : user (ref)

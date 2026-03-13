@@ -1,0 +1,34 @@
+%% Mermaid sequence diagram for movie detail flow
+sequenceDiagram
+  participant U as User
+  participant B as Browser
+  participant P as MoviesDetailPage
+  participant T as TMDB_API
+  participant C as Comments_API
+  participant R as Ratings_API
+
+  U->>B: click movie card
+  B->>P: navigate /movies/:id (render)
+  P->>T: GET /movie/:id (details)
+  T-->>P: 200 OK (movie details)
+  P->>T: GET /movie/:id/credits
+  T-->>P: 200 OK (credits)
+  P->>C: GET /comments?movieId=:id
+  C-->>P: 200 OK (comments[])
+  P->>R: GET /ratings?movieId=:id
+  R-->>P: 200 OK (ratings summary)
+  P-->>B: render movie details + cast + comments + rating UI
+
+  note over U,B: user posts comment
+  U->>B: submit comment
+  B->>P: POST /comments {movieId, text}
+  P->>C: POST /comments {movieId, text, user}
+  C-->>P: 201 Created (comment)
+  P-->>B: append comment to UI
+
+  note over U,B: user rates
+  U->>B: submit rating
+  B->>P: POST /ratings {movieId, rating}
+  P->>R: POST /ratings {movieId, rating, user}
+  R-->>P: 201 Created (rating)
+  P-->>B: update rating UI

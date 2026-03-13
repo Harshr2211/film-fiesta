@@ -1,0 +1,37 @@
+%% Mermaid component diagram for Film-Fiesta
+flowchart LR
+  subgraph Client [Client (React)]
+    App[App]
+    Header[Header]
+    Footer[Footer]
+    LoginModal[LoginModal]
+    ToastStack[ToastStack]
+    AppRoutes[AppRoutes]
+    HomePage[Home / Popular / TopRated / MoviesList / Search / MovieDetail / PersonDetail / Recommendation / Profile]
+    App --> Header
+    App --> Footer
+    App --> LoginModal
+    App --> ToastStack
+    App --> AppRoutes
+    AppRoutes --> HomePage
+    HomePage --> MovieCard[MovieCard]
+    MoviesListPage[MoviesListPage] --> MovieCard
+    MoviesDetailPage[MoviesDetailPage] --> MovieCard
+    SearchPage[SearchPage] --> MovieCard
+    Header --> LoginModal
+    Header --> SearchPage
+  end
+
+  subgraph External [API / Server]
+    TMDB[TMDB API]
+    ServerAPI[Server: Auth / Comments / Ratings]
+  end
+
+  MoviesDetailPage -->|fetch details / credits / images| TMDB
+  MoviesDetailPage -->|GET/POST comments| ServerAPI
+  MoviesDetailPage -->|GET/POST ratings| ServerAPI
+  ProfilePage --> ServerAPI
+
+  classDef pkg fill:#fff6e6,stroke:#d9a500
+  class Client pkg
+  class External pkg
