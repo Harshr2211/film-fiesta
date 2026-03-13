@@ -1,0 +1,49 @@
+@startuml
+' Film-Fiesta component diagram
+skinparam componentStyle rectangle
+
+package "Client (React)" {
+  [App] --> [Header]
+  [App] --> [Footer]
+  [App] --> [LoginModal]
+  [App] --> [ToastStack]
+  [App] --> [AppRoutes]
+
+  [AppRoutes] --> [HomePage]
+  [AppRoutes] --> [PopularPage]
+  [AppRoutes] --> [TopRatedPage]
+  [AppRoutes] --> [MoviesListPage]
+  [AppRoutes] --> [SearchPage]
+  [AppRoutes] --> [MoviesDetailPage]
+  [AppRoutes] --> [PersonDetailPage]
+  [AppRoutes] --> [RecommendationQuizPage]
+  [AppRoutes] --> [RecommendationPage]
+  [AppRoutes] --> [ProfilePage]
+
+  [HomePage] ..> [MovieCard] : uses
+  [MoviesListPage] ..> [MovieCard] : lists
+  [MoviesDetailPage] ..> [MovieCard] : cast / related
+  [SearchPage] ..> [MovieCard]
+
+  [Header] ..> [LoginModal]
+  [Header] ..> [SearchPage]
+}
+
+package "API / External" {
+  [TMDB API] as TMDB
+}
+
+package "Server (Express + MongoDB)" {
+  [Auth API]
+  [Comments API]
+  [Ratings API]
+}
+
+' interactions
+[MoviesDetailPage] --> TMDB : fetch movie details / credits / images
+[MoviesDetailPage] --> [Comments API] : GET/POST comments
+[MoviesDetailPage] --> [Ratings API] : GET/POST ratings
+[ProfilePage] --> [Comments API]
+[ProfilePage] --> [Ratings API]
+
+@enduml

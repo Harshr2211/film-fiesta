@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700">
+  <style>
+    .actor { font: bold 14px sans-serif; }
+    .lifeline { stroke:#888; stroke-dasharray:4 4; }
+    .box { fill:#f3f6fb; stroke:#333; stroke-width:1; rx:6 }
+    .arrow { stroke:#111; stroke-width:1.2; marker-end: url(#arr); }
+    .label { font:13px sans-serif; fill:#111 }
+  </style>
+  <defs>
+    <marker id="arr" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0,10 3.5,0 7" fill="#111" />
+    </marker>
+  </defs>
+
+  <!-- Actors -->
+  <text x="60" y="40" class="actor">User</text>
+  <rect x="40" y="60" width="100" height="28" class="box" />
+
+  <text x="220" y="40" class="actor">Browser</text>
+  <rect x="200" y="60" width="120" height="28" class="box" />
+
+  <text x="420" y="40" class="actor">MoviesDetailPage</text>
+  <rect x="400" y="60" width="180" height="28" class="box" />
+
+  <text x="640" y="40" class="actor">TMDB API</text>
+  <rect x="620" y="60" width="120" height="28" class="box" />
+
+  <text x="820" y="40" class="actor">Comments API</text>
+  <rect x="800" y="60" width="140" height="28" class="box" />
+
+  <text x="1020" y="40" class="actor">Ratings API</text>
+  <rect x="1000" y="60" width="140" height="28" class="box" />
+
+  <!-- lifelines -->
+  <line x1="90" x2="90" y1="110" y2="620" class="lifeline" />
+  <line x1="260" x2="260" y1="110" y2="620" class="lifeline" />
+  <line x1="490" x2="490" y1="110" y2="620" class="lifeline" />
+  <line x1="680" x2="680" y1="110" y2="620" class="lifeline" />
+  <line x1="870" x2="870" y1="110" y2="620" class="lifeline" />
+  <line x1="1090" x2="1090" y1="110" y2="620" class="lifeline" />
+
+  <!-- sequence arrows -->
+  <line x1="90" y1="140" x2="260" y2="140" class="arrow" />
+  <text x="150" y="130" class="label">click movie card</text>
+
+  <line x1="260" y1="180" x2="490" y2="180" class="arrow" />
+  <text x="330" y="170" class="label">navigate /movies/:id (render)</text>
+
+  <line x1="490" y1="220" x2="680" y2="220" class="arrow" />
+  <text x="540" y="210" class="label">GET /movie/:id</text>
+  <line x1="680" y1="260" x2="490" y2="260" class="arrow" />
+  <text x="540" y="250" class="label">200 OK (details)</text>
+
+  <line x1="490" y1="300" x2="680" y2="300" class="arrow" />
+  <text x="540" y="290" class="label">GET /movie/:id/credits</text>
+  <line x1="680" y1="340" x2="490" y2="340" class="arrow" />
+  <text x="540" y="330" class="label">200 OK (credits)</text>
+
+  <line x1="490" y1="380" x2="870" y2="380" class="arrow" />
+  <text x="600" y="370" class="label">GET /comments?movieId=:id</text>
+  <line x1="870" y1="420" x2="490" y2="420" class="arrow" />
+  <text x="600" y="410" class="label">200 OK (comments[])</text>
+
+  <line x1="490" y1="460" x2="1090" y2="460" class="arrow" />
+  <text x="700" y="450" class="label">GET /ratings?movieId=:id</text>
+  <line x1="1090" y1="500" x2="490" y2="500" class="arrow" />
+  <text x="700" y="490" class="label">200 OK (ratings summary)</text>
+
+  <text x="420" y="560" class="label">User posts comment / rating flows follow similar arrows to Comments API / Ratings API</text>
+
+</svg>

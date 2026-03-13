@@ -1,0 +1,36 @@
+@startuml
+' Sequence: user views movie detail, app fetches TMDB and server comments/ratings
+actor User
+participant Browser
+participant "MoviesDetailPage (React)" as Page
+participant "TMDB API" as TMDB
+participant "Server: Comments API" as Comments
+participant "Server: Ratings API" as Ratings
+
+User -> Browser : click movie card
+Browser -> Page : navigate /movies/:id (render)
+Page -> TMDB : GET /movie/:id (details)
+TMDB --> Page : 200 OK (movie details)
+Page -> TMDB : GET /movie/:id/credits
+TMDB --> Page : 200 OK (credits)
+Page -> Comments : GET /comments?movieId=:id
+Comments --> Page : 200 OK (comments[])
+Page -> Ratings : GET /ratings?movieId=:id
+Ratings --> Page : 200 OK (ratings summary)
+Page -> Browser : render movie details + cast + comments + rating UI
+
+' user posts comment
+User -> Browser : submit comment
+Browser -> Page : POST /comments {movieId, text}
+Page -> Comments : POST /comments {movieId, text, user}
+Comments --> Page : 201 Created (comment)
+Page -> Browser : append comment to UI
+
+' user rates
+User -> Browser : submit rating
+Browser -> Page : POST /ratings {movieId, rating}
+Page -> Ratings : POST /ratings {movieId, rating, user}
+Ratings --> Page : 201 Created (rating)
+Page -> Browser : update rating UI
+
+@enduml

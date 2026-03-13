@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="400" viewBox="0 0 900 400">
+  <style>
+    .class { fill:#fff; stroke:#333; stroke-width:1.2; }
+    .stitle { font: bold 16px sans-serif; fill:#111 }
+    .attr { font: 13px monospace; fill:#222 }
+    .arrow { stroke:#111; stroke-width:1.2; marker-end: url(#arrow); }
+  </style>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0,10 3.5,0 7" fill="#111" />
+    </marker>
+  </defs>
+
+  <!-- User class -->
+  <rect x="40" y="40" width="240" height="160" class="class" rx="6"/>
+  <text x="56" y="68" class="stitle">User</text>
+  <text x="56" y="92" class="attr">+ _id: ObjectId</text>
+  <text x="56" y="112" class="attr">+ username: String</text>
+  <text x="56" y="132" class="attr">+ email: String</text>
+  <text x="56" y="152" class="attr">+ passwordHash: String</text>
+
+  <!-- Comment class -->
+  <rect x="320" y="40" width="260" height="140" class="class" rx="6"/>
+  <text x="340" y="68" class="stitle">Comment</text>
+  <text x="340" y="96" class="attr">+ _id: ObjectId</text>
+  <text x="340" y="116" class="attr">+ user: ObjectId (ref User)</text>
+  <text x="340" y="136" class="attr">+ movieId: String</text>
+
+  <!-- Rating class -->
+  <rect x="620" y="40" width="240" height="160" class="class" rx="6"/>
+  <text x="636" y="68" class="stitle">Rating</text>
+  <text x="636" y="96" class="attr">+ _id: ObjectId</text>
+  <text x="636" y="116" class="attr">+ user: ObjectId (ref User)</text>
+  <text x="636" y="136" class="attr">+ movieId: String</text>
+  <text x="636" y="156" class="attr">+ rating: Number</text>
+
+  <!-- relations -->
+  <line x1="280" y1="120" x2="320" y2="120" class="arrow" />
+  <text x="300" y="110" class="attr">ref</text>
+
+  <line x1="580" y1="120" x2="620" y2="120" class="arrow" />
+  <text x="600" y="110" class="attr">ref</text>
+
+</svg>
