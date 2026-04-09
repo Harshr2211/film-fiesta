@@ -4,17 +4,39 @@ const KEY =
   process.env.REACT_APP_API_KEY ||
   (typeof window !== 'undefined' && window.localStorage && window.localStorage.getItem('REACT_APP_TMDB_API_KEY')) ||
   "";
+const READ_ACCESS_TOKEN =
+  process.env.REACT_APP_TMDB_READ_ACCESS_TOKEN ||
+  process.env.REACT_APP_TMDB_V4_TOKEN ||
+  (typeof window !== 'undefined' && window.localStorage && window.localStorage.getItem('REACT_APP_TMDB_READ_ACCESS_TOKEN')) ||
+  "";
 
-if (!KEY) {
+if (!KEY && !READ_ACCESS_TOKEN) {
   // eslint-disable-next-line no-console
   console.warn(
-    "TMDB API key not found. Set REACT_APP_TMDB_API_KEY or REACT_APP_API_KEY in .env(.local) and restart the dev server."
+    "TMDB credentials not found. Set REACT_APP_TMDB_API_KEY (v3) or REACT_APP_TMDB_READ_ACCESS_TOKEN (v4) in .env(.local) and restart the dev server."
   );
+}
+
+function createAuthConfig(url) {
+  if (KEY) {
+    url.searchParams.set("api_key", KEY);
+    return { headers: {} };
+  }
+
+  if (READ_ACCESS_TOKEN) {
+    return {
+      headers: {
+        Authorization: `Bearer ${READ_ACCESS_TOKEN}`,
+      },
+    };
+  }
+
+  return { headers: {} };
 }
 
 async function request(path, params = {}) {
   const url = new URL(`${BASE}${path}`);
-  url.searchParams.set("api_key", KEY);
+  const { headers } = createAuthConfig(url);
   Object.entries(params).forEach(([k, v]) => {
     if (v !== undefined && v !== null) url.searchParams.set(k, v);
   });
@@ -23,9 +45,14 @@ async function request(path, params = {}) {
   console.debug("TMDB request:", url.toString());
 
   try {
-    const res = await fetch(url.toString());
+    const res = await fetch(url.toString(), { headers });
     if (!res.ok) {
       const text = await res.text();
+      if (res.status === 401) {
+        throw new Error(
+          `TMDB 401: Invalid credentials. Ensure Netlify env has either REACT_APP_TMDB_API_KEY (v3) or REACT_APP_TMDB_READ_ACCESS_TOKEN (v4). Raw response: ${text}`
+        );
+      }
       throw new Error(`TMDB ${res.status}: ${text}`);
     }
     return await res.json();
