@@ -212,12 +212,22 @@ async function createHandler() {
     res.json({ ok: true, ts: Date.now(), dbReady: isDbConnected(), platform: 'netlify-functions' })
   );
 
+  app.use((err, req, res, next) => {
+    console.error('[netlify api] unhandled error:', err && err.message ? err.message : err);
+    if (res.headersSent) return next(err);
+    return res.status(500).json({ ok: false, error: 'Internal server error', details: err && err.message ? err.message : String(err) });
+  });
+
   return serverless(app, {
     basePath: '/.netlify/functions/api',
   });
 }
 
 exports.handler = async (event, context) => {
+  if (context && Object.prototype.hasOwnProperty.call(context, 'callbackWaitsForEmptyEventLoop')) {
+    context.callbackWaitsForEmptyEventLoop = false;
+  }
+
   if (!cachedHandler) {
     cachedHandler = await createHandler();
   }
