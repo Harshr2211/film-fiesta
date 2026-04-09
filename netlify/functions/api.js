@@ -17,6 +17,9 @@ const MONGO = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/filmfiesta';
 
 let cachedHandler;
 let dbReady = false;
+let mongoConnectPromise = null;
+
+mongoose.set('bufferCommands', false);
 
 function createAiRouter() {
   const router = express.Router();
@@ -120,28 +123,41 @@ function makeCorsOptions() {
   };
 }
 
-async function connectMongo() {
-  if (mongoose.connection.readyState === 1) {
+function isDbConnected() {
+  return mongoose.connection.readyState === 1;
+}
+
+function connectMongoInBackground() {
+  if (isDbConnected()) {
     dbReady = true;
-    return;
+    return Promise.resolve();
   }
 
-  try {
-    await mongoose.connect(MONGO, {
+  if (mongoConnectPromise) return mongoConnectPromise;
+
+  mongoConnectPromise = mongoose
+    .connect(MONGO, {
       serverSelectionTimeoutMS: 5000,
       connectTimeoutMS: 5000,
       socketTimeoutMS: 10000,
       maxPoolSize: 5,
+    })
+    .then(() => {
+      dbReady = true;
+    })
+    .catch((e) => {
+      dbReady = false;
+      console.warn('[netlify api] MongoDB unavailable, degraded mode:', e && e.message);
+    })
+    .finally(() => {
+      mongoConnectPromise = null;
     });
-    dbReady = true;
-  } catch (e) {
-    dbReady = false;
-    console.warn('[netlify api] MongoDB unavailable, degraded mode:', e && e.message);
-  }
+
+  return mongoConnectPromise;
 }
 
 async function createHandler() {
-  await connectMongo();
+  connectMongoInBackground();
 
   const app = express();
   app.use(helmet());
@@ -155,37 +171,46 @@ async function createHandler() {
     })
   );
 
-  if (dbReady) {
-    const UserModel = require('../../server/models/User');
-    const Rating = require('../../server/models/Rating');
-    const Comment = require('../../server/models/Comment');
+  const UserModel = require('../../server/models/User');
+  const Rating = require('../../server/models/Rating');
+  const Comment = require('../../server/models/Comment');
 
-    const authRouter = makeAuthRouter({
-      UserModel,
-      jwtSecret: JWT_SECRET,
-      jwtExpiresIn: JWT_EXPIRES_IN,
-      mailer: createMailer(),
+  const requireDb = (req, res, next) => {
+    if (isDbConnected()) {
+      dbReady = true;
+      return next();
+    }
+
+    connectMongoInBackground();
+    dbReady = false;
+    return res.status(503).json({
+      ok: false,
+      error: 'Database unavailable. Check MONGO_URI and Atlas network access, then retry.',
+      code: 'DB_UNAVAILABLE',
     });
-    app.use('/auth', authRouter);
+  };
 
-    const authMiddleware = makeAuthMiddleware({ jwtSecret: JWT_SECRET });
+  const authRouter = makeAuthRouter({
+    UserModel,
+    jwtSecret: JWT_SECRET,
+    jwtExpiresIn: JWT_EXPIRES_IN,
+    mailer: createMailer(),
+  });
+  app.use('/auth', requireDb, authRouter);
 
-    const ratingsRouter = makeRatingsRouter({ Rating, User: UserModel, authMiddleware });
-    app.use('/ratings', ratingsRouter);
+  const authMiddleware = makeAuthMiddleware({ jwtSecret: JWT_SECRET });
 
-    const commentsRouter = makeCommentsRouter({ Comment, User: UserModel, authMiddleware });
-    app.use('/comments', commentsRouter);
-  } else {
-    const degraded = (req, res) =>
-      res.status(503).json({ ok: false, error: 'Database unavailable. Configure MONGO_URI to enable auth/ratings/comments.' });
-    app.use('/auth', degraded);
-    app.use('/ratings', degraded);
-    app.use('/comments', degraded);
-  }
+  const ratingsRouter = makeRatingsRouter({ Rating, User: UserModel, authMiddleware });
+  app.use('/ratings', requireDb, ratingsRouter);
+
+  const commentsRouter = makeCommentsRouter({ Comment, User: UserModel, authMiddleware });
+  app.use('/comments', requireDb, commentsRouter);
 
   app.use('/ai', createAiRouter());
 
-  app.get('/health', (req, res) => res.json({ ok: true, ts: Date.now(), dbReady, platform: 'netlify-functions' }));
+  app.get('/health', (req, res) =>
+    res.json({ ok: true, ts: Date.now(), dbReady: isDbConnected(), platform: 'netlify-functions' })
+  );
 
   return serverless(app, {
     basePath: '/.netlify/functions/api',
