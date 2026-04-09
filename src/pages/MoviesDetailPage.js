@@ -4,6 +4,7 @@ import tmdb from '../api/tmdb';
 import { useAuth } from '../context/AuthContext';
 import useDynamicTitle from '../hooks/useDynamicTitle';
 import { addRecentMovie, isMovieSaved, toggleSavedMovie, updateUserPreferences } from '../utils/userData';
+import { API_BASE, resolveApiUrl } from '../utils/apiUrl';
 
 const MoviesDetailPage = () => {
   const { id } = useParams();
@@ -677,7 +678,7 @@ function Comments({ movieId }) {
   const [comments, setComments] = useState([]);
   const [text, setText] = useState('');
   const { user, openLogin } = useAuth();
-  const API = process.env.REACT_APP_API_URL || null;
+  const API = API_BASE;
 
   useEffect(() => {
     let mounted = true;
@@ -694,7 +695,7 @@ function Comments({ movieId }) {
         return;
       }
       try {
-        const res = await fetch(`${API.replace(/\/$/, '')}/api/comments/${movieId}`);
+  const res = await fetch(resolveApiUrl(`/api/comments/${movieId}`));
         const payload = await res.json();
         if (payload && payload.ok && mounted) setComments(payload.data || []);
       } catch (e) {
@@ -731,7 +732,7 @@ function Comments({ movieId }) {
 
     const token = window.localStorage.getItem('ff_token');
     try {
-      const res = await fetch(`${API.replace(/\/$/, '')}/api/comments/${movieId}`, {
+  const res = await fetch(resolveApiUrl(`/api/comments/${movieId}`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ text: trimmedText }),
@@ -804,7 +805,7 @@ function Rating({ movieId }) {
   const [ratings, setRatings] = useState([]);
   const [userRating, setUserRating] = useState(null);
   const [message, setMessage] = useState(null);
-  const API = process.env.REACT_APP_API_URL || null;
+  const API = API_BASE;
 
   useEffect(() => {
     let mounted = true;
@@ -826,7 +827,7 @@ function Rating({ movieId }) {
         return;
       }
       try {
-        const res = await fetch(`${API.replace(/\/$/, '')}/api/ratings/${movieId}`);
+  const res = await fetch(resolveApiUrl(`/api/ratings/${movieId}`));
         const payload = await res.json();
         if (payload && payload.ok && mounted) {
           setRatings(payload.data.ratings || []);
@@ -871,7 +872,7 @@ function Rating({ movieId }) {
 
     const token = window.localStorage.getItem('ff_token');
     try {
-      const res = await fetch(`${API.replace(/\/$/, '')}/api/ratings/${movieId}`, {
+  const res = await fetch(resolveApiUrl(`/api/ratings/${movieId}`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ rating: Number(val) }),

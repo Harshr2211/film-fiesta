@@ -18,23 +18,18 @@ Set this in Netlify Site Settings → Environment Variables:
 
 - `REACT_APP_API_URL=/api`
 - `TMDB_API_KEY=your_tmdb_v3_api_key`
+- `MONGO_URI=your_mongodb_connection_string`
+- `JWT_SECRET=your_long_random_secret`
+- `CORS_ORIGIN=https://your-site.netlify.app`
 
 Optional alternative to `TMDB_API_KEY`:
 
 - `TMDB_READ_ACCESS_TOKEN=your_tmdb_v4_read_access_token`
 
-This makes the frontend call `/api/...` and lets Netlify proxy requests to your backend.
+This makes the frontend call `/api/...`, which is handled by Netlify Function `/.netlify/functions/api`.
 TMDB requests are routed through `/.netlify/functions/tmdb`, so credentials stay server-side.
 
-### Backend URL setup
-
-Open `netlify.toml` and replace:
-
-`https://your-backend-domain.com`
-
-with your deployed backend URL (for example Render/Railway):
-
-`https://your-backend-domain.com/api/:splat`
+No separate backend host is required for auth/comments/ratings when using this Netlify setup.
 
 ### SPA routing
 

@@ -10,10 +10,11 @@ import {
   updateUserPreferences,
   updateUserProfile,
 } from '../utils/userData';
+import { API_BASE, resolveApiUrl } from '../utils/apiUrl';
 
 const AuthContext = createContext(null);
 
-const API = process.env.REACT_APP_API_URL || null;
+const API = API_BASE;
 
 async function parseJSON(res) {
   const t = await res.text();
@@ -47,7 +48,7 @@ export function AuthProvider({ children }) {
 
     if (token) {
       // validate token with /api/auth/me
-      fetch(`${API.replace(/\/$/, '')}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
+  fetch(resolveApiUrl('/api/auth/me'), { headers: { Authorization: `Bearer ${token}` } })
         .then((r) => parseJSON(r))
         .then((payload) => {
           if (payload && payload.ok && payload.user) {
@@ -103,7 +104,7 @@ export function AuthProvider({ children }) {
     }
 
     // server flow
-    const res = await fetch(`${API.replace(/\/$/, '')}/api/auth/signup`, {
+  const res = await fetch(resolveApiUrl('/api/auth/signup'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password, email }),
@@ -150,7 +151,7 @@ export function AuthProvider({ children }) {
       return publicUser;
     }
 
-    const res = await fetch(`${API.replace(/\/$/, '')}/api/auth/login`, {
+  const res = await fetch(resolveApiUrl('/api/auth/login'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
@@ -236,7 +237,7 @@ export function AuthProvider({ children }) {
       return { username: u.username, token };
     }
 
-    const res = await fetch(`${API.replace(/\/$/, '')}/api/auth/forgot`, {
+  const res = await fetch(resolveApiUrl('/api/auth/forgot'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email }),
@@ -276,7 +277,7 @@ export function AuthProvider({ children }) {
       return true;
     }
 
-    const res = await fetch(`${API.replace(/\/$/, '')}/api/auth/reset`, {
+  const res = await fetch(resolveApiUrl('/api/auth/reset'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, token, newPassword }),
