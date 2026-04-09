@@ -90,6 +90,36 @@ function createMailer() {
   }
 }
 
+function parseAllowedOrigins(raw) {
+  if (!raw || raw === '*') return ['*'];
+  return String(raw)
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function makeCorsOptions() {
+  const allowedOrigins = parseAllowedOrigins(CORS_ORIGIN);
+
+  if (allowedOrigins.includes('*')) {
+    return { origin: true };
+  }
+
+  return {
+    origin(origin, callback) {
+      // Allow non-browser requests (curl, server-to-server)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+
+      return callback(
+        new Error(
+          `CORS blocked for origin: ${origin}. Add it to CORS_ORIGIN (comma-separated for multiple origins).`
+        )
+      );
+    },
+  };
+}
+
 async function connectMongo() {
   if (mongoose.connection.readyState === 1) {
     dbReady = true;
@@ -111,7 +141,7 @@ async function createHandler() {
   const app = express();
   app.use(helmet());
   app.use(express.json());
-  app.use(cors({ origin: CORS_ORIGIN === '*' ? true : CORS_ORIGIN }));
+  app.use(cors(makeCorsOptions()));
   app.use(
     rateLimit({
       windowMs: 15 * 60 * 1000,
