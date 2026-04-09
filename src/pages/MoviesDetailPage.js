@@ -677,6 +677,7 @@ function TrailerPanel({ trailer }) {
 function Comments({ movieId }) {
   const [comments, setComments] = useState([]);
   const [text, setText] = useState('');
+  const [message, setMessage] = useState(null);
   const { user, openLogin } = useAuth();
   const API = API_BASE;
 
@@ -684,22 +685,24 @@ function Comments({ movieId }) {
     let mounted = true;
     async function load() {
       if (!API) {
-        // fallback to localStorage
-        try {
-          const raw = window.localStorage.getItem(`comments_${movieId}`);
-          const list = raw ? JSON.parse(raw) : [];
-          if (mounted) setComments(Array.isArray(list) ? list : []);
-        } catch (e) {
-          if (mounted) setComments([]);
+        if (mounted) {
+          setComments([]);
+          setMessage('Server API is not configured. Set REACT_APP_API_URL to /api.');
         }
         return;
       }
       try {
-  const res = await fetch(resolveApiUrl(`/api/comments/${movieId}`));
+        const res = await fetch(resolveApiUrl(`/api/comments/${movieId}`));
         const payload = await res.json();
-        if (payload && payload.ok && mounted) setComments(payload.data || []);
+        if (payload && payload.ok && mounted) {
+          setComments(payload.data || []);
+          setMessage(null);
+        }
       } catch (e) {
-        if (mounted) setComments([]);
+        if (mounted) {
+          setComments([]);
+          setMessage('Unable to load comments from server.');
+        }
       }
     }
     load();
@@ -711,17 +714,7 @@ function Comments({ movieId }) {
     const trimmedText = (text || '').trim();
     if (!trimmedText) return;
     if (!API) {
-      // local fallback
-      const storageKey = `comments_${movieId}`;
-      try {
-        const raw = window.localStorage.getItem(storageKey);
-        const list = raw ? JSON.parse(raw) : [];
-        const nv = { id: Date.now(), name: (user && user.name) || 'Anonymous', text: trimmedText, createdAt: new Date().toISOString() };
-        const next = [nv, ...list];
-        window.localStorage.setItem(storageKey, JSON.stringify(next));
-        setComments(next);
-        setText('');
-      } catch (e) {}
+      setMessage('Server API is not configured. Set REACT_APP_API_URL to /api.');
       return;
     }
 
@@ -741,24 +734,12 @@ function Comments({ movieId }) {
       if (payload && payload.ok && payload.comment) {
         setComments((prev) => [payload.comment, ...prev]);
         setText('');
+        setMessage(null);
       } else {
-        // show error briefly
-        alert((payload && payload.error) || 'Failed to post comment');
+        setMessage((payload && payload.error) || 'Failed to post comment');
       }
     } catch (e) {
-      alert('Failed to post comment');
-    }
-  };
-
-  const remove = (id) => {
-    // client-side remove available only for local fallback; server-side delete not implemented yet
-    if (!API) {
-      const storageKey = `comments_${movieId}`;
-      const next = comments.filter((c) => c.id !== id);
-      setComments(next);
-      try {
-        window.localStorage.setItem(storageKey, JSON.stringify(next));
-      } catch (e) {}
+      setMessage('Failed to post comment');
     }
   };
 
@@ -773,6 +754,8 @@ function Comments({ movieId }) {
         </div>
       </form>
 
+  {message ? <p className="mb-4 text-sm text-red-500 dark:text-red-400">{message}</p> : null}
+
       <div>
         {comments.length === 0 ? (
           <p className="text-slate-500 dark:text-slate-400">Be the first to comment on this movie.</p>
@@ -785,11 +768,6 @@ function Comments({ movieId }) {
                   <div className="text-xs text-slate-500 dark:text-slate-400">{new Date(c.createdAt).toLocaleString()}</div>
                 </div>
                 <div className="mb-2 text-slate-700 dark:text-slate-200">{c.text}</div>
-                <div>
-                  {!process.env.REACT_APP_API_URL && user && (c.name === user.name) && (
-                    <button onClick={() => remove(c.id)} className="text-xs text-red-400 hover:text-red-300">Delete</button>
-                  )}
-                </div>
               </li>
             ))}
           </ul>
@@ -811,45 +789,34 @@ function Rating({ movieId }) {
     let mounted = true;
     async function load() {
       if (!API) {
-        try {
-          const raw = window.localStorage.getItem(`ratings_${movieId}`);
-          const list = raw ? JSON.parse(raw) : [];
-          if (mounted) {
-            setRatings(Array.isArray(list) ? list : []);
-            if (user) {
-              const my = list.find((r) => r.user === user.name);
-              if (my) setUserRating(Number(my.rating));
-            }
-          }
-        } catch (e) {
-          if (mounted) setRatings([]);
+        if (mounted) {
+          setRatings([]);
+          setUserRating(null);
+          setMessage('Server API is not configured. Set REACT_APP_API_URL to /api.');
         }
         return;
       }
       try {
-  const res = await fetch(resolveApiUrl(`/api/ratings/${movieId}`));
+        const res = await fetch(resolveApiUrl(`/api/ratings/${movieId}`));
         const payload = await res.json();
         if (payload && payload.ok && mounted) {
           setRatings(payload.data.ratings || []);
+          setMessage(null);
           if (user) {
             const me = (payload.data.ratings || []).find((r) => r.user && r.user.username === user.name);
             if (me) setUserRating(Number(me.rating));
           }
         }
       } catch (e) {
-        if (mounted) setRatings([]);
+        if (mounted) {
+          setRatings([]);
+          setMessage('Unable to load ratings from server.');
+        }
       }
     }
     load();
     return () => (mounted = false);
   }, [API, movieId, user]);
-
-  const persistLocal = (next) => {
-    setRatings(next);
-    try {
-      window.localStorage.setItem(`ratings_${movieId}`, JSON.stringify(next));
-    } catch (e) {}
-  };
 
   const handleSave = async (val) => {
     if (!user) {
@@ -857,16 +824,7 @@ function Rating({ movieId }) {
       return;
     }
     if (!API) {
-      // local fallback
-      const now = new Date().toISOString();
-      const existing = ratings.find((r) => r.user === user.name);
-      if (existing) {
-        setMessage('You have already rated this movie — ratings are locked and cannot be changed.');
-        return;
-      }
-      const next = [{ user: user.name, rating: val, createdAt: now }, ...ratings];
-      setUserRating(val);
-      persistLocal(next);
+      setMessage('Server API is not configured. Set REACT_APP_API_URL to /api.');
       return;
     }
 

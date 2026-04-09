@@ -16,6 +16,12 @@ const AuthContext = createContext(null);
 
 const API = API_BASE;
 
+function ensureApiConfigured() {
+  if (!API) {
+    throw new Error('Authentication backend is not configured. Set REACT_APP_API_URL to /api and redeploy.');
+  }
+}
+
 async function parseJSON(res) {
   const t = await res.text();
   try {
@@ -33,18 +39,9 @@ export function AuthProvider({ children }) {
   const [notifications, setNotifications] = useState([]);
 
   useEffect(() => {
-    // prefer server-side session if configured
+    // Always validate persisted token against server
     const token = window.localStorage.getItem('ff_token');
-    const local = window.localStorage.getItem('ff_user');
-    if (!API) {
-      // fallback to previous local-only session
-      try {
-        if (local) setUser(JSON.parse(local));
-      } catch (e) {
-        setUser(null);
-      }
-      return;
-    }
+    if (!API) return;
 
     if (token) {
       // validate token with /api/auth/me
@@ -76,32 +73,7 @@ export function AuthProvider({ children }) {
   }, [user?.name]);
 
   async function signup({ username, password, email }) {
-    if (!API) {
-      // fallback to client-only behavior
-      const usersRaw = window.localStorage.getItem('ff_users');
-      const users = usersRaw ? JSON.parse(usersRaw) : [];
-      if (users.find((u) => u.username === username)) throw new Error('Username already exists');
-      // store password insecurely in fallback — keep previous hashing approach by using Web Crypto
-      const pwHash = await (async (pw) => {
-        if (!pw || !window.crypto || !window.crypto.subtle) return pw;
-        const enc = new TextEncoder().encode(pw);
-        const hashBuffer = await window.crypto.subtle.digest('SHA-256', enc);
-        return Array.from(new Uint8Array(hashBuffer)).map((b) => b.toString(16).padStart(2, '0')).join('');
-      })(password);
-      users.push({ username, email, passwordHash: pwHash });
-      window.localStorage.setItem('ff_users', JSON.stringify(users));
-      const publicUser = { name: username };
-      window.localStorage.setItem('ff_user', JSON.stringify(publicUser));
-      clearRecommendationProfile(username);
-      setUser(publicUser);
-      setNotifications(pushNotification(username, {
-        type: 'success',
-        title: 'Welcome to FilmFiesta',
-        message: 'Your account is ready. Let’s build your perfect movie vibe.',
-      }));
-      setShowLogin(false);
-      return publicUser;
-    }
+    ensureApiConfigured();
 
     // server flow
   const res = await fetch(resolveApiUrl('/api/auth/signup'), {
@@ -125,31 +97,7 @@ export function AuthProvider({ children }) {
   }
 
   async function login({ username, password }) {
-    if (!API) {
-      // fallback local
-      const usersRaw = window.localStorage.getItem('ff_users');
-      const users = usersRaw ? JSON.parse(usersRaw) : [];
-    const uname = String(username).toLowerCase();
-    const u = users.find((x) => (x.username && x.username.toLowerCase() === uname) || (x.email && x.email.toLowerCase() === uname));
-      if (!u) throw new Error('User not found');
-      const pwHash = await (async (pw) => {
-        if (!pw || !window.crypto || !window.crypto.subtle) return pw;
-        const enc = new TextEncoder().encode(pw);
-        const hashBuffer = await window.crypto.subtle.digest('SHA-256', enc);
-        return Array.from(new Uint8Array(hashBuffer)).map((b) => b.toString(16).padStart(2, '0')).join('');
-      })(password);
-      if (pwHash !== u.passwordHash) throw new Error('Invalid credentials');
-      const publicUser = { name: username };
-      window.localStorage.setItem('ff_user', JSON.stringify(publicUser));
-      setUser(publicUser);
-      setNotifications(pushNotification(username, {
-        type: 'success',
-        title: 'Signed in',
-        message: 'Welcome back — your movie lounge is ready.',
-      }));
-      setShowLogin(false);
-      return publicUser;
-    }
+    ensureApiConfigured();
 
   const res = await fetch(resolveApiUrl('/api/auth/login'), {
       method: 'POST',
@@ -224,18 +172,7 @@ export function AuthProvider({ children }) {
   }
 
   async function forgotPassword(email) {
-    if (!API) {
-      // local fallback: same as before
-      const usersRaw = window.localStorage.getItem('ff_users');
-      const users = usersRaw ? JSON.parse(usersRaw) : [];
-      const u = users.find((x) => x.email === email);
-      if (!u) throw new Error('No account with that email');
-      const token = Math.random().toString(36).slice(2, 10);
-      try {
-        window.localStorage.setItem(`ff_reset_${u.username}`, JSON.stringify({ token, createdAt: Date.now() }));
-      } catch (e) {}
-      return { username: u.username, token };
-    }
+    ensureApiConfigured();
 
   const res = await fetch(resolveApiUrl('/api/auth/forgot'), {
       method: 'POST',
@@ -249,33 +186,7 @@ export function AuthProvider({ children }) {
   }
 
   async function resetPassword({ username, token, newPassword }) {
-    if (!API) {
-      const dataRaw = window.localStorage.getItem(`ff_reset_${username}`);
-      if (!dataRaw) throw new Error('No reset request');
-      let data;
-      try {
-        data = JSON.parse(dataRaw);
-        if (!data || data.token !== token) throw new Error('Invalid token');
-      } catch (e) {
-        throw new Error('Invalid token');
-      }
-      const usersRaw = window.localStorage.getItem('ff_users');
-      const users = usersRaw ? JSON.parse(usersRaw) : [];
-      const idx = users.findIndex((x) => x.username === username);
-      if (idx === -1) throw new Error('User not found');
-      const pwHash = await (async (pw) => {
-        if (!pw || !window.crypto || !window.crypto.subtle) return pw;
-        const enc = new TextEncoder().encode(pw);
-        const hashBuffer = await window.crypto.subtle.digest('SHA-256', enc);
-        return Array.from(new Uint8Array(hashBuffer)).map((b) => b.toString(16).padStart(2, '0')).join('');
-      })(newPassword);
-      users[idx].passwordHash = pwHash;
-      window.localStorage.setItem('ff_users', JSON.stringify(users));
-      try {
-        window.localStorage.removeItem(`ff_reset_${username}`);
-      } catch (e) {}
-      return true;
-    }
+    ensureApiConfigured();
 
   const res = await fetch(resolveApiUrl('/api/auth/reset'), {
       method: 'POST',
