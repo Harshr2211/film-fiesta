@@ -1,4 +1,53 @@
-# Getting Started with Create React App
+# FilmFiesta
+
+## Deploy on Netlify (Frontend)
+
+This repository is pre-configured for Netlify with `netlify.toml`.
+
+### Netlify settings
+
+- **Base directory:** `film-fiesta` (if your Git repo root is one level above this app)
+- **Build command:** `npm run build`
+- **Publish directory:** `build`
+
+If this folder itself is the Git root, leave **Base directory** empty.
+
+### Required environment variable
+
+Set this in Netlify Site Settings → Environment Variables:
+
+- `REACT_APP_API_URL=/api`
+- `TMDB_API_KEY=your_tmdb_v3_api_key`
+
+Optional alternative to `TMDB_API_KEY`:
+
+- `TMDB_READ_ACCESS_TOKEN=your_tmdb_v4_read_access_token`
+
+This makes the frontend call `/api/...` and lets Netlify proxy requests to your backend.
+TMDB requests are routed through `/.netlify/functions/tmdb`, so credentials stay server-side.
+
+### Backend URL setup
+
+Open `netlify.toml` and replace:
+
+`https://your-backend-domain.com`
+
+with your deployed backend URL (for example Render/Railway):
+
+`https://your-backend-domain.com/api/:splat`
+
+### SPA routing
+
+SPA fallback is already configured in both:
+
+- `netlify.toml`
+- `public/_redirects`
+
+So client-side routes like `/movies/123` load correctly after refresh.
+
+---
+
+## Local development
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 

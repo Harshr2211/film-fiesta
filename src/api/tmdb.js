@@ -1,64 +1,55 @@
-const BASE = process.env.REACT_APP_TMDB_BASE || "https://api.themoviedb.org/3";
-const KEY =
-  process.env.REACT_APP_TMDB_API_KEY ||
-  process.env.REACT_APP_API_KEY ||
-  (typeof window !== 'undefined' && window.localStorage && window.localStorage.getItem('REACT_APP_TMDB_API_KEY')) ||
-  "";
-const READ_ACCESS_TOKEN =
-  process.env.REACT_APP_TMDB_READ_ACCESS_TOKEN ||
-  process.env.REACT_APP_TMDB_V4_TOKEN ||
-  (typeof window !== 'undefined' && window.localStorage && window.localStorage.getItem('REACT_APP_TMDB_READ_ACCESS_TOKEN')) ||
-  "";
-
-if (!KEY && !READ_ACCESS_TOKEN) {
-  // eslint-disable-next-line no-console
-  console.warn(
-    "TMDB credentials not found. Set REACT_APP_TMDB_API_KEY (v3) or REACT_APP_TMDB_READ_ACCESS_TOKEN (v4) in .env(.local) and restart the dev server."
-  );
-}
-
-function createAuthConfig(url) {
-  if (KEY) {
-    url.searchParams.set("api_key", KEY);
-    return { headers: {} };
-  }
-
-  if (READ_ACCESS_TOKEN) {
-    return {
-      headers: {
-        Authorization: `Bearer ${READ_ACCESS_TOKEN}`,
-      },
-    };
-  }
-
-  return { headers: {} };
-}
+const TMDB_PROXY_PATH = process.env.REACT_APP_TMDB_PROXY_PATH || '/.netlify/functions/tmdb';
 
 async function request(path, params = {}) {
-  const url = new URL(`${BASE}${path}`);
-  const { headers } = createAuthConfig(url);
+  const query = new URLSearchParams();
+  query.set('path', path);
+
   Object.entries(params).forEach(([k, v]) => {
-    if (v !== undefined && v !== null) url.searchParams.set(k, v);
+    if (v !== undefined && v !== null) query.set(k, String(v));
   });
 
+  const url = `${TMDB_PROXY_PATH}?${query.toString()}`;
+
   // eslint-disable-next-line no-console
-  console.debug("TMDB request:", url.toString());
+  console.debug('TMDB request via proxy:', url);
 
   try {
-    const res = await fetch(url.toString(), { headers });
+    const res = await fetch(url);
+    const text = await res.text();
+
     if (!res.ok) {
-      const text = await res.text();
-      if (res.status === 401) {
+      let payload = null;
+      try {
+        payload = text ? JSON.parse(text) : null;
+      } catch (e) {
+        payload = null;
+      }
+
+      if (payload?.code === 'TMDB_PROXY_CONFIG_MISSING') {
         throw new Error(
-          `TMDB 401: Invalid credentials. Ensure Netlify env has either REACT_APP_TMDB_API_KEY (v3) or REACT_APP_TMDB_READ_ACCESS_TOKEN (v4). Raw response: ${text}`
+          'TMDB proxy is missing credentials. Add TMDB_API_KEY (or TMDB_READ_ACCESS_TOKEN) in Netlify environment variables and redeploy.'
         );
       }
-      throw new Error(`TMDB ${res.status}: ${text}`);
+
+      if (res.status === 404 && text.includes('Cannot GET /.netlify/functions/tmdb')) {
+        throw new Error(
+          'TMDB proxy endpoint not found. Ensure netlify/functions/tmdb.js exists and Netlify Functions are enabled.'
+        );
+      }
+
+      if (res.status === 401 || payload?.status_code === 7) {
+        throw new Error(
+          `TMDB 401: Invalid credentials from proxy. ${payload?.error || text}`
+        );
+      }
+
+      throw new Error(`TMDB ${res.status}: ${payload?.error || text}`);
     }
-    return await res.json();
+
+    return text ? JSON.parse(text) : {};
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.error("TMDB request failed:", err);
+    console.error('TMDB request failed:', err);
     throw err;
   }
 }
