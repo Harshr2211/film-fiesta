@@ -16,13 +16,18 @@ exports.handler = async (event) => {
     return json(405, { error: 'Method not allowed' });
   }
 
-  const apiKey = process.env.TMDB_API_KEY;
-  const readAccessToken = process.env.TMDB_READ_ACCESS_TOKEN || process.env.TMDB_V4_TOKEN;
+  const apiKey = process.env.TMDB_API_KEY || process.env.REACT_APP_TMDB_API_KEY || process.env.REACT_APP_API_KEY;
+  const readAccessToken =
+    process.env.TMDB_READ_ACCESS_TOKEN ||
+    process.env.TMDB_V4_TOKEN ||
+    process.env.REACT_APP_TMDB_READ_ACCESS_TOKEN ||
+    process.env.REACT_APP_TMDB_V4_TOKEN;
 
   if (!apiKey && !readAccessToken) {
     return json(500, {
       code: 'TMDB_PROXY_CONFIG_MISSING',
-      error: 'Missing TMDB credentials. Set TMDB_API_KEY (or TMDB_READ_ACCESS_TOKEN) in Netlify environment variables.',
+      error:
+        'Missing TMDB credentials. Set TMDB_API_KEY (or TMDB_READ_ACCESS_TOKEN) in Netlify environment variables. Legacy names REACT_APP_TMDB_API_KEY/REACT_APP_API_KEY are also supported.',
     });
   }
 
