@@ -18,6 +18,64 @@ const MONGO = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/filmfiesta';
 let cachedHandler;
 let dbReady = false;
 
+function createAiRouter() {
+  const router = express.Router();
+
+  function stripTopP(obj) {
+    if (!obj || typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) return obj.map(stripTopP);
+    for (const key of Object.keys(obj)) {
+      if (key === 'top_p') delete obj[key];
+      else obj[key] = stripTopP(obj[key]);
+    }
+    return obj;
+  }
+
+  router.post('/', async (req, res) => {
+    try {
+      const body = JSON.parse(JSON.stringify(req.body || {}));
+      stripTopP(body);
+
+      if (String(req.query.dry_run || '') === '1') {
+        return res.json({ ok: true, dryRun: true, sanitized: body });
+      }
+
+      if (!body.model) body.model = process.env.DEFAULT_MODEL || 'gpt-5.4-mini';
+
+      const MODEL_API_URL =
+        process.env.MODEL_API_URL ||
+        process.env.OPENAI_API_URL ||
+        'https://api.openai.com/v1/chat/completions';
+      const API_KEY = process.env.OPENAI_API_KEY || process.env.MODEL_API_KEY;
+
+      if (!API_KEY) {
+        return res.status(500).json({ ok: false, error: 'Model API key not configured on server.' });
+      }
+
+      const upstream = await fetch(MODEL_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${API_KEY}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      const text = await upstream.text();
+      try {
+        const json = JSON.parse(text);
+        return res.status(upstream.status).json(json);
+      } catch (e) {
+        return res.status(upstream.status).send(text);
+      }
+    } catch (err) {
+      return res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+
+  return router;
+}
+
 function createMailer() {
   try {
     const nodemailer = require('nodemailer');
@@ -90,13 +148,7 @@ async function createHandler() {
     app.use('/comments', degraded);
   }
 
-  try {
-    const makeAiRouter = require('../../server/routes/ai');
-    const aiRouter = makeAiRouter({});
-    app.use('/ai', aiRouter);
-  } catch (e) {
-    console.warn('[netlify api] AI route unavailable:', e && e.message);
-  }
+  app.use('/ai', createAiRouter());
 
   app.get('/health', (req, res) => res.json({ ok: true, ts: Date.now(), dbReady, platform: 'netlify-functions' }));
 
