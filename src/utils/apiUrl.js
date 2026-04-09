@@ -1,4 +1,4 @@
-export const API_BASE = process.env.REACT_APP_API_URL || null;
+export const API_BASE = process.env.REACT_APP_API_URL || '/api';
 
 export function resolveApiUrl(path) {
   const normalizedPath = String(path || '');

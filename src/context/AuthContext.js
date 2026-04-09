@@ -16,12 +16,6 @@ const AuthContext = createContext(null);
 
 const API = API_BASE;
 
-function ensureApiConfigured() {
-  if (!API) {
-    throw new Error('Authentication backend is not configured. Set REACT_APP_API_URL to /api and redeploy.');
-  }
-}
-
 async function parseJSON(res) {
   const t = await res.text();
 
@@ -42,6 +36,34 @@ async function parseJSON(res) {
   }
 }
 
+function isTimeoutLikeError(payload) {
+  const msg = String(payload?.error || '').toLowerCase();
+  return msg.includes('timed out') || msg.includes('inactivity timeout');
+}
+
+async function fetchApiJson(path, init = {}) {
+  const primaryUrl = resolveApiUrl(path);
+  const fallbackUrl = path;
+  const urls = primaryUrl === fallbackUrl ? [primaryUrl] : [primaryUrl, fallbackUrl];
+
+  let lastPayload = { ok: false, error: 'Request failed' };
+  for (let i = 0; i < urls.length; i += 1) {
+    try {
+      const res = await fetch(urls[i], init);
+      const payload = await parseJSON(res);
+      if (!isTimeoutLikeError(payload) || i === urls.length - 1) {
+        return payload;
+      }
+      lastPayload = payload;
+    } catch (e) {
+      lastPayload = { ok: false, error: e?.message || 'Network request failed' };
+      if (i === urls.length - 1) return lastPayload;
+    }
+  }
+
+  return lastPayload;
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [showLogin, setShowLogin] = useState(false);
@@ -56,8 +78,7 @@ export function AuthProvider({ children }) {
 
     if (token) {
       // validate token with /api/auth/me
-  fetch(resolveApiUrl('/api/auth/me'), { headers: { Authorization: `Bearer ${token}` } })
-        .then((r) => parseJSON(r))
+      fetchApiJson('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
         .then((payload) => {
           if (payload && payload.ok && payload.user) {
             setUser(payload.user);
@@ -84,15 +105,11 @@ export function AuthProvider({ children }) {
   }, [user?.name]);
 
   async function signup({ username, password, email }) {
-    ensureApiConfigured();
-
-    // server flow
-  const res = await fetch(resolveApiUrl('/api/auth/signup'), {
+    const payload = await fetchApiJson('/api/auth/signup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password, email }),
     });
-    const payload = await parseJSON(res);
     if (!payload.ok) throw new Error(payload.error || 'Signup failed');
     if (payload.token) window.localStorage.setItem('ff_token', payload.token);
     if (payload.user) window.localStorage.setItem('ff_user', JSON.stringify(payload.user));
@@ -108,14 +125,11 @@ export function AuthProvider({ children }) {
   }
 
   async function login({ username, password }) {
-    ensureApiConfigured();
-
-  const res = await fetch(resolveApiUrl('/api/auth/login'), {
+    const payload = await fetchApiJson('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
     });
-    const payload = await parseJSON(res);
     if (!payload.ok) throw new Error(payload.error || 'Login failed');
     if (payload.token) window.localStorage.setItem('ff_token', payload.token);
     if (payload.user) window.localStorage.setItem('ff_user', JSON.stringify(payload.user));
@@ -183,28 +197,22 @@ export function AuthProvider({ children }) {
   }
 
   async function forgotPassword(email) {
-    ensureApiConfigured();
-
-  const res = await fetch(resolveApiUrl('/api/auth/forgot'), {
+    const payload = await fetchApiJson('/api/auth/forgot', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email }),
     });
-    const payload = await parseJSON(res);
     if (!payload.ok) throw new Error(payload.error || 'Failed to request reset');
     // payload may include token for dev
     return { username: payload.username, token: payload.token };
   }
 
   async function resetPassword({ username, token, newPassword }) {
-    ensureApiConfigured();
-
-  const res = await fetch(resolveApiUrl('/api/auth/reset'), {
+    const payload = await fetchApiJson('/api/auth/reset', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, token, newPassword }),
     });
-    const payload = await parseJSON(res);
     if (!payload.ok) throw new Error(payload.error || 'Reset failed');
     return true;
   }
