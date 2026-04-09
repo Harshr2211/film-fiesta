@@ -36,7 +36,7 @@ async function request(path, params = {}) {
   }
 }
 
-export default {
+const tmdb = {
   getList: (apiPath, pageOrParams = 1) => {
     const params = typeof pageOrParams === 'number' ? { page: pageOrParams } : (pageOrParams || {});
     return request(`/${apiPath}`, params);
@@ -56,3 +56,5 @@ export default {
   getPersonMovieCredits: (id) => request(`/person/${id}/movie_credits`),
   discoverMovies: (params = {}) => request(`/discover/movie`, params),
 };
+
+export default tmdb;

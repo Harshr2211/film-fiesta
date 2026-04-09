@@ -8,9 +8,12 @@ const typeStyles = {
   error: 'border-red-400/30 bg-red-500/15 text-red-50',
 };
 
+const EMPTY_NOTIFICATIONS = [];
+
 export default function ToastStack() {
   const auth = useAuth();
-  const notifications = auth?.notifications || [];
+  const notifications = auth?.notifications ?? EMPTY_NOTIFICATIONS;
+  const dismissNotification = auth?.dismissNotification;
   const [closingIds, setClosingIds] = React.useState([]);
 
   React.useEffect(() => {
@@ -28,13 +31,13 @@ export default function ToastStack() {
         }, closeDelay),
         window.setTimeout(() => {
           setClosingIds((prev) => prev.filter((id) => id !== notification.id));
-          auth?.dismissNotification?.(notification.id);
+          dismissNotification?.(notification.id);
         }, removeDelay),
       ];
     });
 
     return () => timers.forEach((timerId) => window.clearTimeout(timerId));
-  }, [auth?.dismissNotification, notifications]);
+  }, [dismissNotification, notifications]);
 
   React.useEffect(() => {
     setClosingIds((prev) => prev.filter((id) => notifications.some((notification) => notification.id === id)));
@@ -59,7 +62,7 @@ export default function ToastStack() {
             </div>
             <button
               type="button"
-              onClick={() => auth?.dismissNotification?.(notification.id)}
+              onClick={() => dismissNotification?.(notification.id)}
               className="rounded-full border border-white/10 px-2 py-1 text-xs font-semibold text-white/80 transition hover:bg-white/10"
             >
               Close

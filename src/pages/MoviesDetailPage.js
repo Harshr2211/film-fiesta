@@ -703,7 +703,7 @@ function Comments({ movieId }) {
     }
     load();
     return () => (mounted = false);
-  }, [movieId]);
+  }, [API, movieId]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -841,7 +841,7 @@ function Rating({ movieId }) {
     }
     load();
     return () => (mounted = false);
-  }, [movieId, user]);
+  }, [API, movieId, user]);
 
   const persistLocal = (next) => {
     setRatings(next);

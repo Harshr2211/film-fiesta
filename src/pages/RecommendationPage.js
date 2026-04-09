@@ -33,9 +33,8 @@ const RecommendationPage = () => {
   const count = getDailyRecommendationCount();
   const watchedIds = useMemo(
     () => new Set(getSavedMovies(auth?.user?.name, 'watched').map((item) => item.id)),
-    [auth?.user?.name, auth?.stats?.watchedCount]
+    [auth?.user?.name]
   );
-  const watchedKey = useMemo(() => Array.from(watchedIds).sort((a, b) => a - b).join(','), [watchedIds]);
 
   useEffect(() => {
     if (!profile) {
@@ -84,7 +83,7 @@ const RecommendationPage = () => {
     return () => {
       mounted = false;
     };
-  }, [count, filters, navigate, profile, watchedKey]);
+  }, [count, filters, navigate, profile, watchedIds]);
 
   useEffect(() => {
     if (isLoading || error || !profile || !location.state?.fromQuiz) return undefined;
