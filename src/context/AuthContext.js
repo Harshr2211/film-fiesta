@@ -24,10 +24,21 @@ function ensureApiConfigured() {
 
 async function parseJSON(res) {
   const t = await res.text();
+
+  const raw = String(t || '');
+  const normalized = raw.trim().toLowerCase();
+  if (normalized.startsWith('<!doctype') || normalized.startsWith('<html') || normalized.includes('<title>inactivity timeout</title>')) {
+    return {
+      ok: false,
+      error:
+        'Server request timed out before responding. Check Netlify function logs and verify MONGO_URI/CORS_ORIGIN are correct.',
+    };
+  }
+
   try {
-    return JSON.parse(t);
+    return JSON.parse(raw);
   } catch (e) {
-    return { ok: false, error: t };
+    return { ok: false, error: raw || 'Unexpected server response' };
   }
 }
 

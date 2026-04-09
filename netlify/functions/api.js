@@ -127,7 +127,12 @@ async function connectMongo() {
   }
 
   try {
-    await mongoose.connect(MONGO);
+    await mongoose.connect(MONGO, {
+      serverSelectionTimeoutMS: 5000,
+      connectTimeoutMS: 5000,
+      socketTimeoutMS: 10000,
+      maxPoolSize: 5,
+    });
     dbReady = true;
   } catch (e) {
     dbReady = false;
