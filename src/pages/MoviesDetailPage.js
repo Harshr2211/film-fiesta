@@ -6,6 +6,19 @@ import useDynamicTitle from '../hooks/useDynamicTitle';
 import { addRecentMovie, isMovieSaved, toggleSavedMovie, updateUserPreferences } from '../utils/userData';
 import { API_BASE, resolveApiUrl } from '../utils/apiUrl';
 
+async function safeApiJson(res) {
+  const raw = await res.text();
+  const trimmed = (raw || '').trim().toLowerCase();
+  if (trimmed.startsWith('<!doctype') || trimmed.startsWith('<html')) {
+    return { ok: false, error: 'Server timed out. Please try again.' };
+  }
+  try {
+    return JSON.parse(raw);
+  } catch (_) {
+    return { ok: false, error: raw || 'Unexpected server response' };
+  }
+}
+
 const MoviesDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -693,10 +706,13 @@ function Comments({ movieId }) {
       }
       try {
         const res = await fetch(resolveApiUrl(`/api/comments/${movieId}`));
-        const payload = await res.json();
+        const payload = await safeApiJson(res);
         if (payload && payload.ok && mounted) {
           setComments(payload.data || []);
           setMessage(null);
+        } else if (mounted) {
+          setComments([]);
+          setMessage(payload?.error || 'Unable to load comments from server.');
         }
       } catch (e) {
         if (mounted) {
@@ -730,7 +746,7 @@ function Comments({ movieId }) {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ text: trimmedText }),
       });
-      const payload = await res.json();
+      const payload = await safeApiJson(res);
       if (payload && payload.ok && payload.comment) {
         setComments((prev) => [payload.comment, ...prev]);
         setText('');
@@ -798,7 +814,7 @@ function Rating({ movieId }) {
       }
       try {
         const res = await fetch(resolveApiUrl(`/api/ratings/${movieId}`));
-        const payload = await res.json();
+        const payload = await safeApiJson(res);
         if (payload && payload.ok && mounted) {
           setRatings(payload.data.ratings || []);
           setMessage(null);
@@ -806,6 +822,9 @@ function Rating({ movieId }) {
             const me = (payload.data.ratings || []).find((r) => r.user && r.user.username === user.name);
             if (me) setUserRating(Number(me.rating));
           }
+        } else if (mounted) {
+          setRatings([]);
+          setMessage(payload?.error || 'Unable to load ratings from server.');
         }
       } catch (e) {
         if (mounted) {
@@ -835,7 +854,7 @@ function Rating({ movieId }) {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ rating: Number(val) }),
       });
-      const payload = await res.json();
+      const payload = await safeApiJson(res);
       if (payload && payload.ok && payload.rating) {
         // prepend new rating
         setRatings((prev) => [payload.rating, ...prev]);
