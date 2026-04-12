@@ -157,7 +157,7 @@ function connectMongoInBackground() {
 }
 
 async function createHandler() {
-  connectMongoInBackground();
+  await connectMongoInBackground();
 
   const app = express();
   app.use(helmet());
@@ -175,14 +175,24 @@ async function createHandler() {
   const Rating = require('../../server/models/Rating');
   const Comment = require('../../server/models/Comment');
 
-  const requireDb = (req, res, next) => {
+  const requireDb = async (req, res, next) => {
     if (isDbConnected()) {
       dbReady = true;
       return next();
     }
 
-    connectMongoInBackground();
-    dbReady = false;
+    // Wait for any in-progress or new connection attempt before failing
+    try {
+      await connectMongoInBackground();
+    } catch (_) {
+      // connection error handled inside connectMongoInBackground
+    }
+
+    if (isDbConnected()) {
+      dbReady = true;
+      return next();
+    }
+
     return res.status(503).json({
       ok: false,
       error: 'Database unavailable. Check MONGO_URI and Atlas network access, then retry.',
