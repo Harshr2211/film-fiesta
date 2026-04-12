@@ -24,7 +24,7 @@ module.exports = function makeAuthRouter({ UserModel, jwtSecret, jwtExpiresIn, m
   router.post('/login', async (req, res) => {
     try {
       const { username, password } = req.body;
-      const u = await UserModel.findOne({ username });
+      const u = await UserModel.findOne({ $or: [{ username }, { email: username }] });
       if (!u) return res.status(400).json({ ok: false, error: 'User not found' });
       const match = await bcrypt.compare(password, u.passwordHash);
       if (!match) return res.status(400).json({ ok: false, error: 'Invalid credentials' });

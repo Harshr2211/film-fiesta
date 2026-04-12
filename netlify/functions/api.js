@@ -127,7 +127,7 @@ function isDbConnected() {
   return mongoose.connection.readyState === 1;
 }
 
-function connectMongoInBackground() {
+function connectMongo() {
   if (isDbConnected()) {
     dbReady = true;
     return Promise.resolve();
@@ -137,9 +137,9 @@ function connectMongoInBackground() {
 
   mongoConnectPromise = mongoose
     .connect(MONGO, {
-      serverSelectionTimeoutMS: 5000,
-      connectTimeoutMS: 5000,
-      socketTimeoutMS: 10000,
+      serverSelectionTimeoutMS: 8000,
+      connectTimeoutMS: 8000,
+      socketTimeoutMS: 15000,
       maxPoolSize: 5,
     })
     .then(() => {
@@ -147,17 +147,15 @@ function connectMongoInBackground() {
     })
     .catch((e) => {
       dbReady = false;
-      console.warn('[netlify api] MongoDB unavailable, degraded mode:', e && e.message);
-    })
-    .finally(() => {
       mongoConnectPromise = null;
+      console.warn('[netlify api] MongoDB unavailable, degraded mode:', e && e.message);
     });
 
   return mongoConnectPromise;
 }
 
 async function createHandler() {
-  connectMongoInBackground();
+  await connectMongo();
 
   const app = express();
   app.use(helmet());
@@ -175,13 +173,24 @@ async function createHandler() {
   const Rating = require('../../server/models/Rating');
   const Comment = require('../../server/models/Comment');
 
-  const requireDb = (req, res, next) => {
+  const requireDb = async (req, res, next) => {
     if (isDbConnected()) {
       dbReady = true;
       return next();
     }
 
-    connectMongoInBackground();
+    // Wait for any pending connection attempt to settle
+    try {
+      await connectMongo();
+    } catch (e) {
+      // ignore – we check readyState below
+    }
+
+    if (isDbConnected()) {
+      dbReady = true;
+      return next();
+    }
+
     dbReady = false;
     return res.status(503).json({
       ok: false,
