@@ -6,7 +6,8 @@ function inferLocalApiBase() {
   if (host === 'localhost' || host === '127.0.0.1') {
     return 'http://localhost:4000/api';
   }
-  return '/api';
+  // In production, prefer direct function path; some deployments may not apply /api redirects consistently.
+  return '/.netlify/functions/api';
 }
 
 export const API_BASE = ENV_API_BASE || inferLocalApiBase();
@@ -36,6 +37,10 @@ export function resolveApiUrl(path) {
   const normalizedBase = EFFECTIVE_API_BASE.replace(/\/$/, '');
 
   if (normalizedBase.endsWith('/api') && normalizedPath.startsWith('/api/')) {
+    return `${normalizedBase}${normalizedPath.slice(4)}`;
+  }
+
+  if (normalizedBase.endsWith('/.netlify/functions/api') && normalizedPath.startsWith('/api/')) {
     return `${normalizedBase}${normalizedPath.slice(4)}`;
   }
 
