@@ -6,6 +6,49 @@ import useDynamicTitle from '../hooks/useDynamicTitle';
 import { addRecentMovie, isMovieSaved, toggleSavedMovie, updateUserPreferences } from '../utils/userData';
 import { API_BASE, resolveApiUrl } from '../utils/apiUrl';
 
+async function parseApiResponse(res) {
+  const raw = await res.text();
+  try {
+    return JSON.parse(raw || '{}');
+  } catch (e) {
+    return {
+      ok: false,
+      error: raw || `Unexpected server response (status ${res.status})`,
+    };
+  }
+}
+
+async function fetchCommunityApi(path, init = {}) {
+  const primaryUrl = resolveApiUrl(path);
+  const fallbackUrl = path;
+  const isApiPath = String(path).startsWith('/api/');
+  const localDirectUrl = isApiPath ? `http://localhost:4000/api${path.slice(4)}` : null;
+  const urls = [primaryUrl, fallbackUrl, localDirectUrl]
+    .filter(Boolean)
+    .filter((url, idx, arr) => arr.indexOf(url) === idx);
+
+  let lastPayload = { ok: false, error: 'Request failed' };
+
+  for (let i = 0; i < urls.length; i += 1) {
+    try {
+      const res = await fetch(urls[i], init);
+      const payload = await parseApiResponse(res);
+      if (payload && payload.ok) return payload;
+
+      lastPayload = payload || { ok: false, error: `Request failed (${res.status})` };
+      // Retry next URL only for connectivity/timeout style failures
+      const msg = String(lastPayload?.error || '').toLowerCase();
+      const shouldRetry = msg.includes('failed to fetch') || msg.includes('timed out') || msg.includes('network');
+      if (!shouldRetry || i === urls.length - 1) return lastPayload;
+    } catch (e) {
+      lastPayload = { ok: false, error: e?.message || 'Network request failed' };
+      if (i === urls.length - 1) return lastPayload;
+    }
+  }
+
+  return lastPayload;
+}
+
 const MoviesDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -692,11 +735,13 @@ function Comments({ movieId }) {
         return;
       }
       try {
-        const res = await fetch(resolveApiUrl(`/api/comments/${movieId}`));
-        const payload = await res.json();
+        const payload = await fetchCommunityApi(`/api/comments/${movieId}`);
         if (payload && payload.ok && mounted) {
           setComments(payload.data || []);
           setMessage(null);
+        } else if (mounted) {
+          setComments([]);
+          setMessage((payload && payload.error) || 'Unable to load comments from server.');
         }
       } catch (e) {
         if (mounted) {
@@ -724,13 +769,17 @@ function Comments({ movieId }) {
     }
 
     const token = window.localStorage.getItem('ff_token');
+    if (!token) {
+      setMessage('Please sign in again to post a comment.');
+      if (openLogin) openLogin();
+      return;
+    }
     try {
-  const res = await fetch(resolveApiUrl(`/api/comments/${movieId}`), {
+      const payload = await fetchCommunityApi(`/api/comments/${movieId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ text: trimmedText }),
       });
-      const payload = await res.json();
       if (payload && payload.ok && payload.comment) {
         setComments((prev) => [payload.comment, ...prev]);
         setText('');
@@ -797,8 +846,7 @@ function Rating({ movieId }) {
         return;
       }
       try {
-        const res = await fetch(resolveApiUrl(`/api/ratings/${movieId}`));
-        const payload = await res.json();
+        const payload = await fetchCommunityApi(`/api/ratings/${movieId}`);
         if (payload && payload.ok && mounted) {
           setRatings(payload.data.ratings || []);
           setMessage(null);
@@ -806,6 +854,9 @@ function Rating({ movieId }) {
             const me = (payload.data.ratings || []).find((r) => r.user && r.user.username === user.name);
             if (me) setUserRating(Number(me.rating));
           }
+        } else if (mounted) {
+          setRatings([]);
+          setMessage((payload && payload.error) || 'Unable to load ratings from server.');
         }
       } catch (e) {
         if (mounted) {
@@ -829,17 +880,27 @@ function Rating({ movieId }) {
     }
 
     const token = window.localStorage.getItem('ff_token');
+    if (!token) {
+      setMessage('Please sign in again to submit a rating.');
+      if (openLogin) openLogin();
+      return;
+    }
     try {
-  const res = await fetch(resolveApiUrl(`/api/ratings/${movieId}`), {
+      const payload = await fetchCommunityApi(`/api/ratings/${movieId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ rating: Number(val) }),
       });
-      const payload = await res.json();
       if (payload && payload.ok && payload.rating) {
-        // prepend new rating
-        setRatings((prev) => [payload.rating, ...prev]);
+        // upsert local list by username (server allows update)
+        setRatings((prev) => {
+          const uname = payload.rating?.user?.username;
+          if (!uname) return [payload.rating, ...prev];
+          const withoutMe = prev.filter((item) => item?.user?.username !== uname);
+          return [payload.rating, ...withoutMe];
+        });
         setUserRating(Number(payload.rating.rating));
+        setMessage(null);
       } else {
         setMessage((payload && payload.error) || 'Failed to save rating');
       }
@@ -888,7 +949,7 @@ function Rating({ movieId }) {
         <div className="ml-6 text-sm text-slate-600 dark:text-slate-300">Avg: <strong>{avgFmt}</strong> ({ratings.length})</div>
       </div>
       {message && <div className="mt-2 text-xs text-red-500 dark:text-red-400">{message}</div>}
-      <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">Click a star to rate (1–10). Requires signing in. Ratings are locked once submitted and cannot be changed.</div>
+      <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">Click a star to rate (1–10). Requires signing in.</div>
     </div>
   );
 }

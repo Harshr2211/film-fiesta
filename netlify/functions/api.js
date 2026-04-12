@@ -13,11 +13,13 @@ const makeAuthMiddleware = require('../../server/middleware/auth');
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_me';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
-const MONGO = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/filmfiesta';
+const MONGO = String(process.env.MONGO_URI || '').trim();
+const DB_CONFIGURED = Boolean(MONGO);
 
 let cachedHandler;
 let dbReady = false;
 let mongoConnectPromise = null;
+let hasLoggedMissingMongoConfig = false;
 
 mongoose.set('bufferCommands', false);
 
@@ -97,8 +99,12 @@ function parseAllowedOrigins(raw) {
   if (!raw || raw === '*') return ['*'];
   return String(raw)
     .split(',')
-    .map((item) => item.trim())
+    .map((item) => item.trim().replace(/\/$/, ''))
     .filter(Boolean);
+}
+
+function normalizeOrigin(origin) {
+  return String(origin || '').trim().replace(/\/$/, '');
 }
 
 function makeCorsOptions() {
@@ -112,13 +118,14 @@ function makeCorsOptions() {
     origin(origin, callback) {
       // Allow non-browser requests (curl, server-to-server)
       if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) return callback(null, true);
+      const normalizedOrigin = normalizeOrigin(origin);
+      if (allowedOrigins.includes(normalizedOrigin)) return callback(null, true);
 
-      return callback(
-        new Error(
-          `CORS blocked for origin: ${origin}. Add it to CORS_ORIGIN (comma-separated for multiple origins).`
-        )
+      const err = new Error(
+        `CORS blocked for origin: ${origin}. Add it to CORS_ORIGIN (comma-separated for multiple origins).`
       );
+      err.code = 'CORS_BLOCKED';
+      return callback(err);
     },
   };
 }
@@ -127,42 +134,77 @@ function isDbConnected() {
   return mongoose.connection.readyState === 1;
 }
 
-function connectMongoInBackground() {
+async function ensureDbConnection() {
+  if (!DB_CONFIGURED) {
+    dbReady = false;
+    return false;
+  }
+
   if (isDbConnected()) {
     dbReady = true;
+    return true;
+  }
+
+  await connectMongoInBackground();
+
+  if (isDbConnected()) {
+    dbReady = true;
+    return true;
+  }
+
+  dbReady = false;
+  return false;
+}
+
+function connectMongoInBackground() {
+  if (!DB_CONFIGURED) {
+    dbReady = false;
+    if (!hasLoggedMissingMongoConfig) {
+      console.error(
+        '[netlify api] Missing MONGO_URI environment variable. Configure it in Netlify Site settings > Environment variables.'
+      );
+      hasLoggedMissingMongoConfig = true;
+    }
     return Promise.resolve();
+  }
+
+  if (isDbConnected()) {
+    dbReady = true;
+    return Promise.resolve(true);
   }
 
   if (mongoConnectPromise) return mongoConnectPromise;
 
   mongoConnectPromise = mongoose
     .connect(MONGO, {
-      serverSelectionTimeoutMS: 5000,
-      connectTimeoutMS: 5000,
-      socketTimeoutMS: 10000,
+      serverSelectionTimeoutMS: 8000,
+      connectTimeoutMS: 8000,
+      socketTimeoutMS: 15000,
       maxPoolSize: 5,
     })
     .then(() => {
       dbReady = true;
+      return true;
     })
     .catch((e) => {
       dbReady = false;
       console.warn('[netlify api] MongoDB unavailable, degraded mode:', e && e.message);
-    })
-    .finally(() => {
       mongoConnectPromise = null;
-    });
+      return false;
+    })
+    ;
 
   return mongoConnectPromise;
 }
 
 async function createHandler() {
-  connectMongoInBackground();
+  await connectMongoInBackground();
 
   const app = express();
   app.use(helmet());
   app.use(express.json());
   app.use(cors(makeCorsOptions()));
+  app.options('*', cors(makeCorsOptions()));
   app.use(
     rateLimit({
       windowMs: 15 * 60 * 1000,
@@ -175,19 +217,28 @@ async function createHandler() {
   const Rating = require('../../server/models/Rating');
   const Comment = require('../../server/models/Comment');
 
-  const requireDb = (req, res, next) => {
-    if (isDbConnected()) {
-      dbReady = true;
-      return next();
-    }
+  const requireDb = async (req, res, next) => {
+    try {
+      if (!DB_CONFIGURED) {
+        return res.status(503).json({
+          ok: false,
+          error:
+            'Database is not configured. Set MONGO_URI in Netlify Site settings > Environment variables and redeploy.',
+          code: 'DB_NOT_CONFIGURED',
+        });
+      }
 
-    connectMongoInBackground();
-    dbReady = false;
-    return res.status(503).json({
-      ok: false,
-      error: 'Database unavailable. Check MONGO_URI and Atlas network access, then retry.',
-      code: 'DB_UNAVAILABLE',
-    });
+      const ready = await ensureDbConnection();
+      if (ready) return next();
+
+      return res.status(503).json({
+        ok: false,
+        error: 'Database unavailable. Check Atlas network access and MONGO_URI connectivity, then retry.',
+        code: 'DB_UNAVAILABLE',
+      });
+    } catch (err) {
+      return next(err);
+    }
   };
 
   const authRouter = makeAuthRouter({
@@ -208,13 +259,26 @@ async function createHandler() {
 
   app.use('/ai', createAiRouter());
 
-  app.get('/health', (req, res) =>
-    res.json({ ok: true, ts: Date.now(), dbReady: isDbConnected(), platform: 'netlify-functions' })
-  );
+  app.get('/health', async (req, res) => {
+    if (!isDbConnected()) {
+      await ensureDbConnection();
+    }
+
+    return res.json({
+      ok: true,
+      ts: Date.now(),
+      dbConfigured: DB_CONFIGURED,
+      dbReady: isDbConnected(),
+      platform: 'netlify-functions',
+    });
+  });
 
   app.use((err, req, res, next) => {
     console.error('[netlify api] unhandled error:', err && err.message ? err.message : err);
     if (res.headersSent) return next(err);
+    if (err && err.code === 'CORS_BLOCKED') {
+      return res.status(403).json({ ok: false, error: err.message, code: 'CORS_BLOCKED' });
+    }
     return res.status(500).json({ ok: false, error: 'Internal server error', details: err && err.message ? err.message : String(err) });
   });
 

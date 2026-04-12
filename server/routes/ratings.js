@@ -3,6 +3,22 @@ const express = require('express');
 module.exports = function makeRatingsRouter({ Rating, User, authMiddleware }) {
   const router = express.Router();
 
+  async function resolveUserFromRequest(req) {
+    const userId = req.user && req.user.id ? String(req.user.id) : '';
+    const username = req.user && req.user.name ? String(req.user.name).trim() : '';
+
+    if (userId) {
+      const byId = await User.findById(userId);
+      if (byId) return byId;
+    }
+
+    if (username) {
+      return User.findOne({ username });
+    }
+
+    return null;
+  }
+
   // Get ratings summary for a movie
   router.get('/:movieId', async (req, res) => {
     try {
@@ -28,19 +44,33 @@ module.exports = function makeRatingsRouter({ Rating, User, authMiddleware }) {
   router.post('/:movieId', authMiddleware, async (req, res) => {
     try {
       const { movieId } = req.params;
-      const { rating } = req.body;
-      const username = req.user && req.user.name;
-      if (!username) return res.status(401).json({ ok: false, error: 'Unauthorized' });
-      if (!rating || Number.isNaN(Number(rating)) || rating < 1 || rating > 10) {
+      const body = req.body && typeof req.body === 'object' ? req.body : {};
+      const rawRating = body.rating;
+
+      if (!movieId || String(movieId).trim().length === 0) {
+        return res.status(400).json({ ok: false, error: 'movieId is required' });
+      }
+
+      const numericRating = Number(rawRating);
+      if (!Number.isFinite(numericRating) || numericRating < 1 || numericRating > 10) {
         return res.status(400).json({ ok: false, error: 'Rating must be 1-10' });
       }
-      const user = await User.findOne({ username });
-      if (!user) return res.status(400).json({ ok: false, error: 'User not found' });
-      // ensure no existing rating
+
+      const user = await resolveUserFromRequest(req);
+      if (!user) return res.status(401).json({ ok: false, error: 'Unauthorized user' });
+
+      // if user already rated, update instead of throwing conflict
       const existing = await Rating.findOne({ user: user._id, movieId });
-      if (existing) return res.status(409).json({ ok: false, error: 'You have already rated this movie' });
-      const r = new Rating({ user: user._id, movieId: String(movieId), rating: Number(rating) });
-      await r.save();
+      let r;
+      if (existing) {
+        existing.rating = numericRating;
+        await existing.save();
+        r = existing;
+      } else {
+        r = new Rating({ user: user._id, movieId: String(movieId), rating: numericRating });
+        await r.save();
+      }
+
       return res.json({ ok: true, rating: { id: r._id, user: { username: user.username }, rating: r.rating, createdAt: r.createdAt } });
     } catch (err) {
       if (err.code === 11000) return res.status(409).json({ ok: false, error: 'Duplicate rating' });

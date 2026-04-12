@@ -1,4 +1,4 @@
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const { nanoid } = require('nanoid');
 
 // a tiny wrapper over lowdb access to keep controllers clean

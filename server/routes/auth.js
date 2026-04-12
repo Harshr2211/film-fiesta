@@ -1,30 +1,65 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 
 module.exports = function makeAuthRouter({ UserModel, jwtSecret, jwtExpiresIn, mailer }) {
   const router = express.Router();
 
+  function isLikelyEmail(value) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+  }
+
   router.post('/signup', async (req, res) => {
     try {
-      const { username, password, email } = req.body;
+      const body = req.body && typeof req.body === 'object' ? req.body : {};
+      const username = String(body.username || '').trim();
+      const password = String(body.password || '');
+      const emailRaw = String(body.email || '').trim();
+      const email = emailRaw ? emailRaw.toLowerCase() : '';
+
       if (!username || !password) return res.status(400).json({ ok: false, error: 'username and password required' });
-      const existing = await UserModel.findOne({ $or: [{ username }, { email }] });
+
+      if (email && !isLikelyEmail(email)) {
+        return res.status(400).json({ ok: false, error: 'Invalid email format' });
+      }
+
+      const duplicateFilters = [{ username }];
+      if (email) duplicateFilters.push({ email });
+
+      const existing = await UserModel.findOne({ $or: duplicateFilters });
       if (existing) return res.status(400).json({ ok: false, error: 'User or email already exists' });
+
       const hash = await bcrypt.hash(password, 10);
-      const u = new UserModel({ username, email: email || null, passwordHash: hash });
+      const userDoc = {
+        username,
+        passwordHash: hash,
+      };
+      if (email) userDoc.email = email;
+
+      const u = new UserModel(userDoc);
       await u.save();
       const token = jwt.sign({ sub: u.username }, jwtSecret, { expiresIn: jwtExpiresIn });
       return res.json({ ok: true, user: { name: u.username }, token });
     } catch (err) {
+      if (err && err.code === 11000) {
+        return res.status(409).json({ ok: false, error: 'User or email already exists' });
+      }
       return res.status(500).json({ ok: false, error: err.message });
     }
   });
 
   router.post('/login', async (req, res) => {
     try {
-      const { username, password } = req.body;
-      const u = await UserModel.findOne({ username });
+      const body = req.body && typeof req.body === 'object' ? req.body : {};
+      const identifier = String(body.username || '').trim();
+      const password = String(body.password || '');
+      if (!identifier || !password) {
+        return res.status(400).json({ ok: false, error: 'username/email and password required' });
+      }
+      const lookupEmail = identifier.toLowerCase();
+      const u = await UserModel.findOne({
+        $or: [{ username: identifier }, { email: lookupEmail }],
+      });
       if (!u) return res.status(400).json({ ok: false, error: 'User not found' });
       const match = await bcrypt.compare(password, u.passwordHash);
       if (!match) return res.status(400).json({ ok: false, error: 'Invalid credentials' });
