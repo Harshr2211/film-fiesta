@@ -33,6 +33,7 @@ const optionMeta = {
   },
   language: {
     English: '🇺🇸',
+    Hindi: '🇮🇳',
     International: '🌍',
     'Any language': '🗣️',
   },
@@ -72,7 +73,7 @@ export const QUESTION_OPTIONS = {
   mood: ['Exciting', 'Feel-good', 'Dark', 'Emotional', 'Mind-bending', 'Cozy'],
   pace: ['Fast', 'Balanced', 'Slow-burn', 'Epic'],
   era: ['Latest', 'Modern classics', 'Any time', '90s & 2000s'],
-  language: ['English', 'International', 'Any language'],
+  language: ['English', 'Hindi', 'International', 'Any language'],
   genre: ['Action', 'Comedy', 'Drama', 'Horror', 'Sci-Fi', 'Romance', 'Animation', 'Thriller'],
   ending: ['Happy', 'Twisty', 'Bittersweet', 'I am open'],
   watchtime: ['Under 2 hours', 'Movie night length', 'Long epic'],
@@ -116,6 +117,13 @@ const paceToSort = {
   'Slow-burn': 'primary_release_date.desc',
 };
 
+const languagePreferences = {
+  English: { with_original_language: 'en' },
+  Hindi: { with_original_language: 'hi', with_origin_country: 'IN', region: 'IN' },
+  International: {},
+  'Any language': {},
+};
+
 function getProfileKey(username) {
   return username ? `${QUIZ_KEY}_${String(username).toLowerCase()}` : QUIZ_KEY;
 }
@@ -157,20 +165,22 @@ export function buildRecommendationParams(profile = {}) {
   const uniqueGenres = [...new Set(genres)];
   const currentYear = new Date().getFullYear();
   const industryParams = industryPreferences[profile.industry] || {};
+  const languageParams = languagePreferences[profile.language] || {};
   const southIndianLanguages = ['ta', 'te', 'ml', 'kn'];
   const withOriginalLanguage = profile.industry === 'South Indian'
     ? southIndianLanguages.join('|')
-    : industryParams.with_original_language;
+    : (industryParams.with_original_language || languageParams.with_original_language);
 
   return {
     with_genres: uniqueGenres.join(','),
-    sort_by: paceToSort[profile.pace] || 'popularity.desc',
+    sort_by: profile.genre === 'Horror' ? 'vote_average.desc' : (paceToSort[profile.pace] || 'popularity.desc'),
     vote_count_gte: 200,
     include_adult: false,
     language: 'en-US',
     page: 1,
     primary_release_date_gte: profile.era === 'Latest' ? `${currentYear - 2}-01-01` : undefined,
     primary_release_date_lte: profile.era === '90s & 2000s' ? '2009-12-31' : undefined,
+    ...languageParams,
     ...industryParams,
     with_original_language: withOriginalLanguage,
   };
@@ -275,6 +285,28 @@ function toExcludedIdentitySet(values = []) {
   return set;
 }
 
+function passesHardFilters(movie = {}, profile = {}) {
+  const movieGenres = Array.isArray(movie.genre_ids) ? movie.genre_ids : [];
+  const lang = String(movie.original_language || '').toLowerCase();
+
+  // If the user explicitly selected a genre, enforce at least one matching genre id.
+  const explicitGenres = genreMap[profile.genre] || [];
+  if (explicitGenres.length > 0 && !movieGenres.some((id) => explicitGenres.includes(id))) {
+    return false;
+  }
+
+  // Industry/language hard constraints to reduce off-target random picks.
+  if (profile.industry === 'Hollywood' && lang && lang !== 'en') return false;
+  if (profile.industry === 'Bollywood' && lang && lang !== 'hi') return false;
+  if (profile.industry === 'K-Drama' && lang && lang !== 'ko') return false;
+  if (profile.industry === 'South Indian' && lang && !['ta', 'te', 'ml', 'kn'].includes(lang)) return false;
+
+  if (profile.language === 'English' && lang && lang !== 'en') return false;
+  if (profile.language === 'Hindi' && lang && lang !== 'hi') return false;
+
+  return true;
+}
+
 function applyDiversity(sorted = [], count = 3) {
   const picked = [];
   const genreCount = new Map();
@@ -308,7 +340,7 @@ export function curateRecommendations(results = [], profile = {}, count = 3) {
   const filtered = deduped.filter((movie) => {
     const idBlocked = excluded.has(String(movie.id));
     const titleBlocked = excluded.has(getTitleKey(movie));
-    return !idBlocked && !titleBlocked;
+    return !idBlocked && !titleBlocked && passesHardFilters(movie, profile);
   });
 
   const scored = filtered
