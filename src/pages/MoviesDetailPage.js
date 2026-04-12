@@ -6,6 +6,12 @@ import useDynamicTitle from '../hooks/useDynamicTitle';
 import { addRecentMovie, isMovieSaved, toggleSavedMovie, updateUserPreferences } from '../utils/userData';
 import { API_BASE, resolveApiUrl } from '../utils/apiUrl';
 
+function isLocalhostRuntime() {
+  if (typeof window === 'undefined') return false;
+  const host = String(window.location.hostname || '').toLowerCase();
+  return host === 'localhost' || host === '127.0.0.1';
+}
+
 async function parseApiResponse(res) {
   const raw = await res.text();
   try {
@@ -22,7 +28,7 @@ async function fetchCommunityApi(path, init = {}) {
   const primaryUrl = resolveApiUrl(path);
   const fallbackUrl = path;
   const isApiPath = String(path).startsWith('/api/');
-  const localDirectUrl = isApiPath ? `http://localhost:4000/api${path.slice(4)}` : null;
+  const localDirectUrl = isApiPath && isLocalhostRuntime() ? `http://localhost:4000/api${path.slice(4)}` : null;
   const urls = [primaryUrl, fallbackUrl, localDirectUrl]
     .filter(Boolean)
     .filter((url, idx, arr) => arr.indexOf(url) === idx);

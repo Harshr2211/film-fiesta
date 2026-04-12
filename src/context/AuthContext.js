@@ -144,7 +144,7 @@ async function fetchApiJson(path, init = {}) {
   const primaryUrl = resolveApiUrl(path);
   const fallbackUrl = path;
   const isApiPath = String(path).startsWith('/api/');
-  const localDirectUrl = isApiPath ? `http://localhost:4000/api${path.slice(4)}` : null;
+  const localDirectUrl = isApiPath && isLocalhostRuntime() ? `http://localhost:4000/api${path.slice(4)}` : null;
   const urls = [primaryUrl, fallbackUrl, localDirectUrl].filter(Boolean).filter((url, idx, arr) => arr.indexOf(url) === idx);
 
   let lastPayload = { ok: false, error: 'Request failed' };
