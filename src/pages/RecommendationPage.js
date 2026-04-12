@@ -35,6 +35,15 @@ const RecommendationPage = () => {
     () => new Set(getSavedMovies(auth?.user?.name, 'watched').map((item) => item.id)),
     [auth?.user?.name]
   );
+  const seenMovies = useMemo(() => {
+    const username = auth?.user?.name;
+    return [
+      ...getSavedMovies(username, 'watched'),
+      ...getSavedMovies(username, 'watchlist'),
+      ...getSavedMovies(username, 'favorites'),
+      ...getSavedMovies(username, 'recent'),
+    ];
+  }, [auth?.user?.name]);
 
   useEffect(() => {
     if (!profile) {
@@ -47,7 +56,7 @@ const RecommendationPage = () => {
     setError(null);
 
     const params = buildRecommendationParams(profile);
-    loadRecommendationFeed(tmdb, { ...profile, ...filters, ...params }, count + 6)
+  loadRecommendationFeed(tmdb, { ...profile, ...filters, ...params, seenIds: seenMovies }, count + 8)
       .then((curated) => {
         if (!mounted) return;
         const filtered = curated.filter((movie) => (filters.excludeSeen ? !watchedIds.has(movie.id) : true));
@@ -83,7 +92,7 @@ const RecommendationPage = () => {
     return () => {
       mounted = false;
     };
-  }, [count, filters, navigate, profile, watchedIds]);
+  }, [count, filters, navigate, profile, seenMovies, watchedIds]);
 
   useEffect(() => {
     if (isLoading || error || !profile || !location.state?.fromQuiz) return undefined;

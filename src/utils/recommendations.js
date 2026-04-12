@@ -206,13 +206,122 @@ export function scoreMovieAgainstProfile(movie, profile = {}) {
   if (profile.intensity === 'Easy watch' && movieGenres.some((id) => [35, 10751].includes(id))) score += 2;
   if (profile.industry === 'Bollywood' && movie.original_language === 'hi') score += 4;
   if (profile.industry === 'South Indian' && ['ta', 'te', 'ml', 'kn'].includes(movie.original_language)) score += 5;
+
+  // quality and recency priors
+  const voteCount = Number(movie.vote_count || 0);
+  if (voteCount >= 300) score += 1;
+  if (voteCount >= 1000) score += 1;
+  if (Number(movie.popularity || 0) > 30) score += 1;
+
   return score;
 }
 
+function normalizeTitle(title = '') {
+  return String(title)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getReleaseYear(movie = {}) {
+  const raw = String(movie.release_date || '').slice(0, 4);
+  const year = Number(raw);
+  return Number.isFinite(year) ? year : null;
+}
+
+function getTitleKey(movie = {}) {
+  const title = normalizeTitle(movie.title || movie.original_title || '');
+  const year = getReleaseYear(movie) || 'na';
+  return `${title}|${year}`;
+}
+
+function dedupeMovies(results = []) {
+  const byId = new Set();
+  const byTitleYear = new Set();
+  const deduped = [];
+
+  for (const movie of results) {
+    if (!movie || !movie.id) continue;
+    const idKey = String(movie.id);
+    const titleYearKey = getTitleKey(movie);
+    const hasTitle = Boolean(normalizeTitle(movie.title || movie.original_title));
+
+    if (byId.has(idKey)) continue;
+    if (hasTitle && byTitleYear.has(titleYearKey)) continue;
+
+    byId.add(idKey);
+    if (hasTitle) byTitleYear.add(titleYearKey);
+    deduped.push(movie);
+  }
+
+  return deduped;
+}
+
+function toExcludedIdentitySet(values = []) {
+  const set = new Set();
+  for (const value of values || []) {
+    if (!value) continue;
+    if (typeof value === 'number' || typeof value === 'string') {
+      set.add(String(value));
+      continue;
+    }
+    if (value.id) set.add(String(value.id));
+    const titleKey = getTitleKey(value);
+    if (titleKey !== '|na' && !titleKey.startsWith('|')) {
+      set.add(titleKey);
+    }
+  }
+  return set;
+}
+
+function applyDiversity(sorted = [], count = 3) {
+  const picked = [];
+  const genreCount = new Map();
+
+  for (const movie of sorted) {
+    const primaryGenre = Array.isArray(movie.genre_ids) && movie.genre_ids.length ? movie.genre_ids[0] : 'na';
+    const used = genreCount.get(primaryGenre) || 0;
+    // keep some diversity: at most 2 with same primary genre until list fills
+    if (used >= 2 && picked.length < Math.max(3, count - 1)) continue;
+    picked.push(movie);
+    genreCount.set(primaryGenre, used + 1);
+    if (picked.length >= count) break;
+  }
+
+  // backfill if diversity filter was too strict
+  if (picked.length < count) {
+    for (const movie of sorted) {
+      if (picked.find((x) => x.id === movie.id)) continue;
+      picked.push(movie);
+      if (picked.length >= count) break;
+    }
+  }
+
+  return picked;
+}
+
 export function curateRecommendations(results = [], profile = {}, count = 3) {
-  return [...results]
-    .sort((a, b) => scoreMovieAgainstProfile(b, profile) - scoreMovieAgainstProfile(a, profile))
-    .slice(0, count);
+  const excluded = toExcludedIdentitySet(profile?.seenIds || []);
+  const deduped = dedupeMovies(results);
+
+  const filtered = deduped.filter((movie) => {
+    const idBlocked = excluded.has(String(movie.id));
+    const titleBlocked = excluded.has(getTitleKey(movie));
+    return !idBlocked && !titleBlocked;
+  });
+
+  const scored = filtered
+    .map((movie) => ({ movie, score: scoreMovieAgainstProfile(movie, profile) }))
+    .filter((entry) => entry.score >= 6)
+    .sort((a, b) => b.score - a.score)
+    .map((entry) => entry.movie);
+
+  const fallbackSorted = filtered
+    .sort((a, b) => scoreMovieAgainstProfile(b, profile) - scoreMovieAgainstProfile(a, profile));
+
+  const ranked = scored.length >= Math.max(2, Math.ceil(count / 2)) ? scored : fallbackSorted;
+  return applyDiversity(ranked, count);
 }
 
 export function getRecommendationReasons(movie, profile = {}) {
@@ -237,7 +346,7 @@ export async function loadRecommendationFeed(tmdb, profile, count) {
   try {
     const tmdbRecommendations = await tmdb.getRecommendations(seedMovie.id, 1);
     const combined = [seedMovie, ...(tmdbRecommendations?.results || []), ...discoverResults];
-    const deduped = combined.filter((movie, index, arr) => arr.findIndex((item) => item.id === movie.id) === index);
+    const deduped = dedupeMovies(combined);
     return curateRecommendations(deduped, profile, count);
   } catch (e) {
     return curateRecommendations(discoverResults, profile, count);
